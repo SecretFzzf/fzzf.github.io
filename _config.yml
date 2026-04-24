@@ -1,9 +1,0 @@
-title: FZZF Blog
-description: 记录文章、想法、作品和日常
-baseurl: ""
-url: "https://secretfzzf.github.io"
-theme: minima
-lang: zh-CN
-
-plugins:
-  - jekyll-feed
