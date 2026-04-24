@@ -222,9 +222,10 @@ def generate_site():
     # 2. 生成首页 index.html
     list_html = '<div class="wrapper">\n<ul class="post-list">\n'
     for post in posts:
-        # 去掉了生成主页的时间
+        short_date = post['date_obj'].strftime("%y-%m-%d")
         list_html += f'''<li>
-        <h3>
+        <h3 style="display: flex; align-items: center;">
+          <span style="color: #626262; margin-right: 8px;">{short_date} &middot;</span>
           <a class="post-link" href="{post['url']}">
             {post['title']}
           </a>
