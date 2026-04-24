@@ -121,9 +121,9 @@ def load_template():
 
     home_intro = """<div class="wrapper">
   <div class="home">
-    <h1 class="page-heading">ZHILIN ZHANG</h1>
+    <h1 class="page-heading">Unit6,勿忘心安Live,风中追风Fzz1,Yu Chang.没错这些都是我</h1>
     <div class="page-intro">
-      <p>设计师，开发者，以及一个不希望自己只是设计师和开发者的人。</p>
+      <p>歌手,硕士研究生,开发者,调参侠,游泳爱好者,摄影师,骑行者(曾一天骑行120km)</p>
       <p>这个博客囊括了我写过的大部分文章，而这里面的大部分其实都没有什么营养。所以，慎重点击。</p>
     </div>
     <hr class="home-hr">
