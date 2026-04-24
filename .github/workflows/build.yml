@@ -1,0 +1,38 @@
+name: Build Blog
+
+# 触发条件：当主分支的代码有推送（比如你上传了新 markdown 文件）时运行
+on:
+  push:
+    branches:
+      - main
+      - master # 如果你的主分支叫 master，可以保留这行
+    paths:
+      - 'markdowns/**'
+      - 'build.py'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install markdown
+
+      - name: Run build.py
+        run: python build.py
+
+      - name: Commit and push generated HTML
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-generate blog HTML"
+          file_pattern: 'index.html posts/*'
