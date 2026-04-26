@@ -140,44 +140,116 @@ def load_template():
 """
     return header_html, home_intro, footer_html
 
+def parse_date_from_filename(filename):
+    title = filename.replace(".md", "")
+    match = re.match(r'^(\d{4}-\d{2}-\d{2})-(.*)$', title)
+    if not match:
+        return None, None
+
+    date_obj = datetime.strptime(match.group(1), "%Y-%m-%d")
+    clean_title = match.group(2).replace("-", " ")
+    return date_obj, clean_title
+
+def extract_meta_from_html(html_path):
+    try:
+        with open(html_path, "r", encoding="utf-8") as f:
+            html = f.read()
+    except OSError:
+        return None
+
+    title_match = re.search(r'<h1 class="post-title[^>]*>(.*?)</h1>', html, re.S)
+    date_match = re.search(r'<time class="dt-published" datetime="(\d{4}-\d{2}(?:-\d{2})?)"', html)
+
+    if not title_match or not date_match:
+        return None
+
+    date_raw = date_match.group(1)
+    for fmt in ("%Y-%m-%d", "%Y-%m"):
+        try:
+            date_obj = datetime.strptime(date_raw, fmt)
+            break
+        except ValueError:
+            date_obj = None
+
+    if date_obj is None:
+        return None
+
+    title = title_match.group(1).strip()
+    return {
+        "title": title,
+        "date_obj": date_obj,
+    }
+
+def parse_markdown_file(filepath, filename, html_path=None):
+    date_obj, title = parse_date_from_filename(filename)
+
+    if date_obj is None:
+        # 文件名里没有日期时，优先复用已生成 HTML 里的日期，避免每次构建漂移。
+        existing_meta = extract_meta_from_html(html_path) if html_path and os.path.exists(html_path) else None
+        if existing_meta:
+            date_obj = existing_meta["date_obj"]
+            if not title:
+                title = existing_meta["title"]
+        else:
+            date_obj = datetime.fromtimestamp(os.path.getmtime(filepath))
+
+    if not title:
+        title = filename.replace(".md", "")
+
+    with open(filepath, "r", encoding="utf-8") as f:
+        md_content = f.read()
+
+    first_line = md_content.split('\n')[0]
+    if first_line.startswith("# "):
+        title = first_line[2:].strip()
+        md_content = "\n".join(md_content.split('\n')[1:])
+
+    html_content = markdown.markdown(md_content, extensions=['tables', 'fenced_code', 'toc'])
+    return {
+        "title": title,
+        "date_obj": date_obj,
+        "html_content": html_content,
+    }
+
 def parse_markdowns():
     posts = []
     for filename in os.listdir(MD_DIR):
         if not filename.endswith(".md"):
             continue
         filepath = os.path.join(MD_DIR, filename)
+        output_filename = filename.replace('.md', '.html')
+        output_path = os.path.join(HTML_DIR, output_filename)
+        post_url = f"{HTML_DIR}/{output_filename}"
 
-        # 解析日期 (要求格式: YYYY-MM-DD-名称.md)
-        date_str = ""
-        title = filename.replace(".md", "")
-        date_obj = datetime.now()
-        match = re.match(r'^(\d{4}-\d{2}-\d{2})-(.*)$', title)
-        if match:
-            date_str = match.group(1)
-            title = match.group(2).replace("-", " ")
-            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        needs_build = (not os.path.exists(output_path)) or (os.path.getmtime(filepath) > os.path.getmtime(output_path))
+
+        if needs_build:
+            parsed = parse_markdown_file(filepath, filename, output_path)
+            title = parsed["title"]
+            date_obj = parsed["date_obj"]
+            html_content = parsed["html_content"]
         else:
-            date_str = datetime.fromtimestamp(os.path.getmtime(filepath)).strftime("%Y-%m-%d")
+            existing_meta = extract_meta_from_html(output_path)
+            if existing_meta:
+                title = existing_meta["title"]
+                date_obj = existing_meta["date_obj"]
+                html_content = None
+            else:
+                parsed = parse_markdown_file(filepath, filename, output_path)
+                title = parsed["title"]
+                date_obj = parsed["date_obj"]
+                html_content = parsed["html_content"]
+                needs_build = True
 
-        with open(filepath, "r", encoding="utf-8") as f:
-            md_content = f.read()
-
-        # 尝试从第一行H1提取真正的标题
-        first_line = md_content.split('\n')[0]
-        if first_line.startswith("# "):
-            title = first_line[2:].strip()
-            md_content = "\n".join(md_content.split('\n')[1:])
-
-        html_content = markdown.markdown(md_content, extensions=['tables', 'fenced_code', 'toc'])
-
-        post_url = f"{HTML_DIR}/{filename.replace('.md', '.html')}"
+        date_str = date_obj.strftime("%Y-%m")
         posts.append({
             "title": title,
             "date_str": date_str,
             "date_obj": date_obj,
             "html_content": html_content,
             "url": post_url,
-            "filename": filename.replace('.md', '.html')
+            "filename": output_filename,
+            "needs_build": needs_build
         })
 
     # 按日期倒序排列
@@ -195,6 +267,10 @@ def generate_site():
 
     # 1. 生成文章详情页
     for post in posts:
+        if not post["needs_build"]:
+            continue
+
+        display_date = post['date_obj'].strftime("%y.%m")
         post_html = f"""
 {header}
       <div class="wrapper">
@@ -203,7 +279,7 @@ def generate_site():
             <h1 class="post-title p-name" itemprop="name headline" style="margin-bottom: 5px;">{post['title']}</h1>
             <p class="post-meta" style="color: #828282; margin-bottom: 20px;">
               <time class="dt-published" datetime="{post['date_str']}" itemprop="datePublished">
-                {post['date_str']}
+                                {display_date}
               </time>
             </p>
           </header>
@@ -221,7 +297,7 @@ def generate_site():
     # 2. 生成首页 index.html
     list_html = '<div class="wrapper">\n<ul class="post-list">\n'
     for post in posts:
-        short_date = post['date_obj'].strftime("%y-%m-%d")
+        short_date = post['date_obj'].strftime("%y.%m")
         list_html += f'''<li>
         <h3 style="display: flex; align-items: center;">
           <span style="color: #626262; margin-right: 8px;">{short_date} &middot;</span>
@@ -235,7 +311,8 @@ def generate_site():
     with open(INDEX_FILE, "w", encoding="utf-8") as f:
         f.write(index_content)
 
-    print(f"成功生成了主页 ({INDEX_FILE}) 和 {len(posts)} 篇文章在 {HTML_DIR}/ 目录下！")
+    built_count = sum(1 for p in posts if p["needs_build"])
+    print(f"成功生成了主页 ({INDEX_FILE})，增量更新了 {built_count} 篇文章，总文章数 {len(posts)}。")
 
 if __name__ == "__main__":
     generate_site()
